@@ -19,6 +19,7 @@
       root.removeAttribute("data-theme");
     }
     var effective = theme === "system" ? systemTheme() : theme;
+    root.style.colorScheme = effective;
     var btn = document.getElementById("themeToggleBtn");
     btn.textContent = effective === "dark" ? "☀️ Light mode" : "🌙 Dark mode";
   }

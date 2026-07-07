@@ -18,6 +18,7 @@
     --hold: #8b93a3;
     --danger: #e5534b;
     --radius: 10px;
+    color-scheme: light dark;
   }
   @media (prefers-color-scheme: light) {
     :root {
@@ -46,6 +47,10 @@
     --muted: #8b93a3;
   }
   * { box-sizing: border-box; }
+  input, textarea, button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -60,7 +65,12 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
+  }
+  .page-header-text {
+    min-width: 0;
+    flex: 1 1 auto;
   }
   .theme-toggle-btn {
     flex-shrink: 0;
@@ -269,7 +279,7 @@
 <body>
 <div class="wrap">
   <div class="page-header">
-    <div>
+    <div class="page-header-text">
       <h1>Task Update Builder</h1>
       <div class="subtitle">Pick a date, manage your sections and tasks, then generate the message to paste back into chat.</div>
     </div>
