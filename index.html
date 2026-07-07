@@ -47,7 +47,7 @@
     --muted: #8b93a3;
   }
   * { box-sizing: border-box; }
-  input, textarea, button {
+  input, textarea, button, select {
     -webkit-appearance: none;
     appearance: none;
   }
@@ -123,17 +123,11 @@
   button.icon { padding: 4px 8px; }
   button:active { transform: translateY(1px); }
 
-  /* ---- Layout: calendar + sections ---- */
-  .top-grid {
-    display: grid;
-    grid-template-columns: 300px 1fr;
-    gap: 16px;
-  }
-  @media (max-width: 800px) {
-    .top-grid { grid-template-columns: 1fr; }
-  }
-
   /* ---- Calendar ---- */
+  .calendar-inner {
+    max-width: 340px;
+    margin: 0 auto;
+  }
   .cal-header {
     display: flex;
     align-items: center;
@@ -256,6 +250,18 @@
     font-size: 0.8rem;
   }
   .important-toggle.active { background: #e5534b; border-color: #e5534b; color: #fff; }
+  .move-select {
+    flex-shrink: 0;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 6px 4px;
+    max-width: 34px;
+    cursor: pointer;
+  }
   .add-task-btn { margin-top: 4px; width: 100%; }
 
   /* ---- Output ---- */
@@ -295,9 +301,9 @@
     </div>
   </div>
 
-  <div class="top-grid">
-    <div class="card">
-      <h2>Date</h2>
+  <div class="card">
+    <h2>Date</h2>
+    <div class="calendar-inner">
       <div class="cal-header">
         <button id="prevMonth" class="icon">◀</button>
         <strong id="calMonthLabel"></strong>
@@ -309,17 +315,6 @@
         <button id="todayBtn">Today</button>
       </div>
     </div>
-
-    <div class="card">
-      <h2>Message preview format</h2>
-      <div class="hint">The generator below builds a WhatsApp-style message using the date and the sections below. The first section carries the date; tasks marked <b>!</b> are flagged *VERY IMPORTANT*.</div>
-      <div class="row">
-        <button id="generateBtn" class="primary">Generate message</button>
-        <button id="copyBtn">Copy to clipboard</button>
-        <span id="copiedMsg" class="copied-msg" style="display:none">Copied!</span>
-      </div>
-      <textarea id="output" readonly placeholder="Your generated message will appear here..."></textarea>
-    </div>
   </div>
 
   <div class="sections" id="sectionsContainer"></div>
@@ -327,6 +322,17 @@
   <div class="row">
     <button id="addSectionBtn" class="primary">+ Add section</button>
     <button id="clearAllBtn" class="danger" style="border:1px solid var(--border)">Clear everything</button>
+  </div>
+
+  <div class="card">
+    <h2>Message preview format</h2>
+    <div class="hint">The generator below builds a WhatsApp-style message using the date and the sections above. The first section carries the date; tasks marked <b>!</b> are flagged *VERY IMPORTANT*. The result is editable, so feel free to tweak it before copying.</div>
+    <div class="row">
+      <button id="generateBtn" class="primary">Generate message</button>
+      <button id="copyBtn">Copy to clipboard</button>
+      <span id="copiedMsg" class="copied-msg" style="display:none">Copied!</span>
+    </div>
+    <textarea id="output" placeholder="Your generated message will appear here..."></textarea>
   </div>
 </div>
 

@@ -313,6 +313,36 @@
         orderWrap.appendChild(downBtn);
         row.appendChild(orderWrap);
 
+        if (state.sections.length > 1) {
+          var moveSelect = document.createElement("select");
+          moveSelect.className = "move-select";
+          moveSelect.title = "Move to another section";
+          var placeholderOpt = document.createElement("option");
+          placeholderOpt.textContent = "⇄";
+          placeholderOpt.value = "";
+          placeholderOpt.disabled = true;
+          placeholderOpt.selected = true;
+          moveSelect.appendChild(placeholderOpt);
+          state.sections.forEach(function (otherSection) {
+            if (otherSection.id === section.id) return;
+            var opt = document.createElement("option");
+            opt.value = otherSection.id;
+            opt.textContent = otherSection.title || "Untitled";
+            moveSelect.appendChild(opt);
+          });
+          moveSelect.addEventListener("change", function () {
+            var targetId = moveSelect.value;
+            if (!targetId) return;
+            var target = state.sections.find(function (s) { return s.id === targetId; });
+            if (!target) return;
+            section.items.splice(idx, 1);
+            target.items.push(item);
+            saveState();
+            renderSections();
+          });
+          row.appendChild(moveSelect);
+        }
+
         var delBtn = document.createElement("button");
         delBtn.className = "danger";
         delBtn.textContent = "✕";
