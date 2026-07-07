@@ -30,15 +30,24 @@
     calViewMonth: null,
     todo: [],
     doing: [],
-    hold: []
+    hold: [],
+    styles: { todo: "numbers", doing: "stars", hold: "letters" }
   };
+
+  var STYLE_OPTIONS = [
+    { key: "numbers", label: "123" },
+    { key: "letters", label: "ABC" },
+    { key: "stars", label: "✱" }
+  ];
 
   function loadState() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return clone(defaultState);
       var parsed = JSON.parse(raw);
-      return Object.assign(clone(defaultState), parsed);
+      var merged = Object.assign(clone(defaultState), parsed);
+      merged.styles = Object.assign(clone(defaultState.styles), parsed.styles || {});
+      return merged;
     } catch (e) {
       return clone(defaultState);
     }
@@ -130,10 +139,30 @@
 
   // ---------- Task list rendering ----------
   var SECTION_CONFIG = {
-    todo: { listId: "todoList", key: "todo", important: true, placeholder: "New to-do item..." },
-    doing: { listId: "doingList", key: "doing", important: false, placeholder: "New item..." },
-    hold: { listId: "holdList", key: "hold", important: false, placeholder: "New item..." }
+    todo: { listId: "todoList", key: "todo", important: true, placeholder: "New to-do item...", selectorId: "todoStyleSelector" },
+    doing: { listId: "doingList", key: "doing", important: false, placeholder: "New item...", selectorId: "doingStyleSelector" },
+    hold: { listId: "holdList", key: "hold", important: false, placeholder: "New item...", selectorId: "holdStyleSelector" }
   };
+
+  function renderStyleSelectors() {
+    Object.keys(SECTION_CONFIG).forEach(function (sectionKey) {
+      var cfg = SECTION_CONFIG[sectionKey];
+      var container = document.getElementById(cfg.selectorId);
+      container.innerHTML = "";
+      STYLE_OPTIONS.forEach(function (opt) {
+        var btn = document.createElement("button");
+        btn.textContent = opt.label;
+        btn.title = "Number this section with " + opt.label;
+        if (state.styles[cfg.key] === opt.key) btn.classList.add("active");
+        btn.addEventListener("click", function () {
+          state.styles[cfg.key] = opt.key;
+          saveState();
+          renderStyleSelectors();
+        });
+        container.appendChild(btn);
+      });
+    });
+  }
 
   function renderTasks() {
     Object.keys(SECTION_CONFIG).forEach(function (sectionKey) {
@@ -221,33 +250,44 @@
   });
 
   // ---------- Message generation ----------
+  function itemPrefix(style, index) {
+    if (style === "numbers") return (index + 1) + ". ";
+    if (style === "letters") return String.fromCharCode(65 + index) + ") ";
+    return "* ";
+  }
+
+  function appendSectionLines(lines, items, style, supportsImportant) {
+    var i = 0;
+    items.forEach(function (item) {
+      if (!item.text.trim()) return;
+      var important = supportsImportant && item.important ? "*VERY IMPORTANT*: " : "";
+      lines.push(itemPrefix(style, i) + important + item.text.trim());
+      if (style === "letters") lines.push("");
+      i++;
+    });
+  }
+
+  function trimTrailingBlank(lines) {
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  }
+
   function generateMessage() {
     var lines = [];
     lines.push("*To Do: " + formatDisplayDate(state.date) + ":*");
     lines.push("");
-    state.todo.forEach(function (item, i) {
-      if (!item.text.trim()) return;
-      var prefix = item.important ? "*VERY IMPORTANT*: " : "";
-      lines.push((i + 1) + ". " + prefix + item.text.trim());
-    });
+    appendSectionLines(lines, state.todo, state.styles.todo, true);
+    trimTrailingBlank(lines);
     lines.push("");
     lines.push("___________________________");
     lines.push("*Currently Doing:*");
     lines.push("");
-    state.doing.forEach(function (item) {
-      if (!item.text.trim()) return;
-      lines.push("* " + item.text.trim());
-    });
+    appendSectionLines(lines, state.doing, state.styles.doing, false);
+    trimTrailingBlank(lines);
     lines.push("___________________________");
     lines.push("*On Hold:*");
     lines.push("");
-    state.hold.forEach(function (item, i) {
-      if (!item.text.trim()) return;
-      var letter = String.fromCharCode(65 + i);
-      lines.push(letter + ") " + item.text.trim());
-      lines.push("");
-    });
-    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    appendSectionLines(lines, state.hold, state.styles.hold, false);
+    trimTrailingBlank(lines);
     return lines.join("\n");
   }
 
@@ -316,35 +356,50 @@
       blocks[cur.key] = (blocks[cur.key] || "") + "\n" + chunk;
     }
 
-    var newTodo = [];
-    var todoLineRegex = /^\s*\d+[.)]\s*(.+)$/gm;
-    var tm;
-    while ((tm = todoLineRegex.exec(blocks.todo)) !== null) {
-      var line = tm[1].trim();
-      var important = /\*?VERY IMPORTANT\*?:?\s*/i.test(line);
-      line = line.replace(/\*?VERY IMPORTANT\*?:?\s*/i, "").trim();
-      if (line) newTodo.push({ text: line, important: important });
+    var todoFound = extractItems(blocks.todo);
+    if (todoFound && todoFound.items.length) {
+      state.todo = todoFound.items.map(function (line) {
+        var important = /\*?VERY IMPORTANT\*?:?\s*/i.test(line);
+        var text = line.replace(/\*?VERY IMPORTANT\*?:?\s*/i, "").trim();
+        return { text: text, important: important };
+      });
+      state.styles.todo = todoFound.style;
     }
 
-    var newDoing = [];
-    var doingLineRegex = /^\s*[*\-•]\s*(.+)$/gm;
-    var dm;
-    while ((dm = doingLineRegex.exec(blocks.doing)) !== null) {
-      var dline = dm[1].trim();
-      if (dline) newDoing.push({ text: dline, important: false });
+    var doingFound = extractItems(blocks.doing);
+    if (doingFound && doingFound.items.length) {
+      state.doing = doingFound.items.map(function (line) { return { text: line, important: false }; });
+      state.styles.doing = doingFound.style;
     }
 
-    var newHold = [];
-    var holdLineRegex = /^\s*[A-Za-z]\)\s*(.+)$/gm;
-    var hm;
-    while ((hm = holdLineRegex.exec(blocks.hold)) !== null) {
-      var hline = hm[1].trim();
-      if (hline) newHold.push({ text: hline, important: false });
+    var holdFound = extractItems(blocks.hold);
+    if (holdFound && holdFound.items.length) {
+      state.hold = holdFound.items.map(function (line) { return { text: line, important: false }; });
+      state.styles.hold = holdFound.style;
     }
+  }
 
-    if (newTodo.length) state.todo = newTodo;
-    if (newDoing.length) state.doing = newDoing;
-    if (newHold.length) state.hold = newHold;
+  var LINE_PATTERNS = [
+    { style: "numbers", source: "^\\s*\\d+[.)]\\s*(.+)$" },
+    { style: "letters", source: "^\\s*[A-Za-z]\\)\\s*(.+)$" },
+    { style: "stars", source: "^\\s*[*\\-•]\\s*(.+)$" }
+  ];
+
+  function extractItems(block) {
+    var best = null;
+    LINE_PATTERNS.forEach(function (p) {
+      var re = new RegExp(p.source, "gm");
+      var items = [];
+      var mm;
+      while ((mm = re.exec(block)) !== null) {
+        var line = mm[1].trim();
+        if (line) items.push(line);
+      }
+      if (items.length && (!best || items.length > best.items.length)) {
+        best = { style: p.style, items: items };
+      }
+    });
+    return best;
   }
 
   function normalizeHeader(h) {
@@ -361,6 +416,7 @@
     parsePastedMessage(raw);
     saveState();
     renderCalendar();
+    renderStyleSelectors();
     renderTasks();
     document.getElementById("output").value = "";
   });
@@ -377,11 +433,13 @@
     state.calViewMonth = p.m;
     saveState();
     renderCalendar();
+    renderStyleSelectors();
     renderTasks();
     document.getElementById("output").value = "";
   });
 
   // ---------- Init ----------
   renderCalendar();
+  renderStyleSelectors();
   renderTasks();
 })();

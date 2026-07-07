@@ -143,6 +143,23 @@
     .sections { grid-template-columns: 1fr; }
   }
   .section-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  .style-selector {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+  .style-selector button {
+    flex: 1;
+    padding: 5px 6px;
+    font-size: 0.75rem;
+  }
+  .style-selector button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
   .dot-todo { background: var(--todo); }
   .dot-doing { background: var(--doing); }
   .dot-hold { background: var(--hold); }
@@ -235,16 +252,19 @@
   <div class="sections">
     <div class="card" id="section-todo">
       <h2><span class="section-dot dot-todo"></span> To Do</h2>
+      <div class="style-selector" id="todoStyleSelector"></div>
       <div id="todoList"></div>
       <button class="add-task-btn" data-section="todo">+ Add task</button>
     </div>
     <div class="card" id="section-doing">
       <h2><span class="section-dot dot-doing"></span> Currently Doing</h2>
+      <div class="style-selector" id="doingStyleSelector"></div>
       <div id="doingList"></div>
       <button class="add-task-btn" data-section="doing">+ Add task</button>
     </div>
     <div class="card" id="section-hold">
       <h2><span class="section-dot dot-hold"></span> On Hold</h2>
+      <div class="style-selector" id="holdStyleSelector"></div>
       <div id="holdList"></div>
       <button class="add-task-btn" data-section="hold">+ Add task</button>
     </div>
