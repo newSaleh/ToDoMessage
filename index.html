@@ -136,13 +136,41 @@
   /* ---- Sections ---- */
   .sections {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px;
   }
   @media (max-width: 900px) {
     .sections { grid-template-columns: 1fr; }
   }
-  .section-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .section-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .section-title-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 4px 6px;
+  }
+  .section-title-input:hover,
+  .section-title-input:focus {
+    background: var(--panel-alt);
+    border-color: var(--border);
+    outline: none;
+  }
+  .section-header button.danger {
+    flex-shrink: 0;
+  }
 
   .style-selector {
     display: flex;
@@ -211,7 +239,7 @@
 <body>
 <div class="wrap">
   <h1>Task Update Builder</h1>
-  <div class="subtitle">Pick a date, manage your To Do / Currently Doing / On Hold lists, then generate the message to paste back into chat.</div>
+  <div class="subtitle">Pick a date, manage your sections and tasks, then generate the message to paste back into chat.</div>
 
   <div class="card">
     <h2>Load from a pasted message (optional)</h2>
@@ -239,7 +267,7 @@
 
     <div class="card">
       <h2>Message preview format</h2>
-      <div class="hint">The generator below builds a WhatsApp-style message using the date and the three lists on the right/below. Tasks marked <b>!</b> are flagged *VERY IMPORTANT*.</div>
+      <div class="hint">The generator below builds a WhatsApp-style message using the date and the sections below. The first section carries the date; tasks marked <b>!</b> are flagged *VERY IMPORTANT*.</div>
       <div class="row">
         <button id="generateBtn" class="primary">Generate message</button>
         <button id="copyBtn">Copy to clipboard</button>
@@ -249,28 +277,10 @@
     </div>
   </div>
 
-  <div class="sections">
-    <div class="card" id="section-todo">
-      <h2><span class="section-dot dot-todo"></span> To Do</h2>
-      <div class="style-selector" id="todoStyleSelector"></div>
-      <div id="todoList"></div>
-      <button class="add-task-btn" data-section="todo">+ Add task</button>
-    </div>
-    <div class="card" id="section-doing">
-      <h2><span class="section-dot dot-doing"></span> Currently Doing</h2>
-      <div class="style-selector" id="doingStyleSelector"></div>
-      <div id="doingList"></div>
-      <button class="add-task-btn" data-section="doing">+ Add task</button>
-    </div>
-    <div class="card" id="section-hold">
-      <h2><span class="section-dot dot-hold"></span> On Hold</h2>
-      <div class="style-selector" id="holdStyleSelector"></div>
-      <div id="holdList"></div>
-      <button class="add-task-btn" data-section="hold">+ Add task</button>
-    </div>
-  </div>
+  <div class="sections" id="sectionsContainer"></div>
 
   <div class="row">
+    <button id="addSectionBtn" class="primary">+ Add section</button>
     <button id="clearAllBtn" class="danger" style="border:1px solid var(--border)">Clear everything</button>
   </div>
 </div>

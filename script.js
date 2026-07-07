@@ -4,6 +4,7 @@
   var STORAGE_KEY = "taskUpdateBuilder.v1";
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   var DOW = ["S","M","T","W","T","F","S"];
+  var DOT_COLORS = ["#4f9dff", "#f5a623", "#8b93a3", "#3ecf6f", "#e5534b", "#b57bee"];
 
   function todayISO() {
     var d = new Date();
@@ -23,16 +24,9 @@
     var dd = String(p.d).padStart(2, "0");
     return dd + "/" + MONTHS[p.m] + "/" + p.y;
   }
-
-  var defaultState = {
-    date: todayISO(),
-    calViewYear: null,
-    calViewMonth: null,
-    todo: [],
-    doing: [],
-    hold: [],
-    styles: { todo: "numbers", doing: "stars", hold: "letters" }
-  };
+  function generateId() {
+    return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
 
   var STYLE_OPTIONS = [
     { key: "numbers", label: "123" },
@@ -40,28 +34,65 @@
     { key: "stars", label: "✱" }
   ];
 
+  function defaultSections() {
+    return [
+      { id: generateId(), title: "To Do", style: "numbers", items: [] },
+      { id: generateId(), title: "Currently Doing", style: "stars", items: [] },
+      { id: generateId(), title: "On Hold", style: "letters", items: [] }
+    ];
+  }
+
+  function defaultState() {
+    return {
+      date: todayISO(),
+      calViewYear: null,
+      calViewMonth: null,
+      sections: defaultSections()
+    };
+  }
+
   function loadState() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return clone(defaultState);
+      if (!raw) return defaultState();
       var parsed = JSON.parse(raw);
-      var merged = Object.assign(clone(defaultState), parsed);
-      merged.styles = Object.assign(clone(defaultState.styles), parsed.styles || {});
-      return merged;
+      if (!parsed.sections && (parsed.todo || parsed.doing || parsed.hold)) {
+        // Migrate from the older fixed todo/doing/hold format.
+        var styles = parsed.styles || {};
+        parsed.sections = [
+          { id: generateId(), title: "To Do", style: styles.todo || "numbers", items: parsed.todo || [] },
+          { id: generateId(), title: "Currently Doing", style: styles.doing || "stars", items: parsed.doing || [] },
+          { id: generateId(), title: "On Hold", style: styles.hold || "letters", items: parsed.hold || [] }
+        ];
+      }
+      var state = defaultState();
+      state.date = parsed.date || state.date;
+      state.calViewYear = parsed.calViewYear != null ? parsed.calViewYear : state.calViewYear;
+      state.calViewMonth = parsed.calViewMonth != null ? parsed.calViewMonth : state.calViewMonth;
+      if (Array.isArray(parsed.sections) && parsed.sections.length) {
+        state.sections = parsed.sections.map(function (s) {
+          return {
+            id: s.id || generateId(),
+            title: s.title || "Untitled",
+            style: s.style || "numbers",
+            items: Array.isArray(s.items) ? s.items : []
+          };
+        });
+      }
+      return state;
     } catch (e) {
-      return clone(defaultState);
+      return defaultState();
     }
   }
-  function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
   var state = loadState();
   if (state.calViewYear == null) {
-    var p = parseISO(state.date);
-    state.calViewYear = p.y;
-    state.calViewMonth = p.m;
+    var p0 = parseISO(state.date);
+    state.calViewYear = p0.y;
+    state.calViewMonth = p0.m;
   }
 
   // ---------- Calendar ----------
@@ -137,61 +168,88 @@
     renderCalendar();
   });
 
-  // ---------- Task list rendering ----------
-  var SECTION_CONFIG = {
-    todo: { listId: "todoList", key: "todo", important: true, placeholder: "New to-do item...", selectorId: "todoStyleSelector" },
-    doing: { listId: "doingList", key: "doing", important: false, placeholder: "New item...", selectorId: "doingStyleSelector" },
-    hold: { listId: "holdList", key: "hold", important: false, placeholder: "New item...", selectorId: "holdStyleSelector" }
-  };
+  // ---------- Sections rendering ----------
+  function renderSections() {
+    var container = document.getElementById("sectionsContainer");
+    container.innerHTML = "";
 
-  function renderStyleSelectors() {
-    Object.keys(SECTION_CONFIG).forEach(function (sectionKey) {
-      var cfg = SECTION_CONFIG[sectionKey];
-      var container = document.getElementById(cfg.selectorId);
-      container.innerHTML = "";
+    state.sections.forEach(function (section, sectionIdx) {
+      var card = document.createElement("div");
+      card.className = "card";
+
+      var header = document.createElement("div");
+      header.className = "section-header";
+
+      var dot = document.createElement("span");
+      dot.className = "section-dot";
+      dot.style.background = DOT_COLORS[sectionIdx % DOT_COLORS.length];
+      header.appendChild(dot);
+
+      var titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.className = "section-title-input";
+      titleInput.value = section.title;
+      titleInput.placeholder = "Section title";
+      titleInput.addEventListener("input", function () {
+        section.title = titleInput.value;
+        saveState();
+      });
+      header.appendChild(titleInput);
+
+      var removeBtn = document.createElement("button");
+      removeBtn.className = "danger";
+      removeBtn.textContent = "✕";
+      removeBtn.title = "Remove section";
+      removeBtn.addEventListener("click", function () {
+        if (state.sections.length <= 1) {
+          alert("You need at least one section.");
+          return;
+        }
+        if (!confirm('Delete the "' + section.title + '" section and all its tasks?')) return;
+        state.sections = state.sections.filter(function (s) { return s.id !== section.id; });
+        saveState();
+        renderSections();
+      });
+      header.appendChild(removeBtn);
+
+      card.appendChild(header);
+
+      var styleSelector = document.createElement("div");
+      styleSelector.className = "style-selector";
       STYLE_OPTIONS.forEach(function (opt) {
         var btn = document.createElement("button");
         btn.textContent = opt.label;
         btn.title = "Number this section with " + opt.label;
-        if (state.styles[cfg.key] === opt.key) btn.classList.add("active");
+        if (section.style === opt.key) btn.classList.add("active");
         btn.addEventListener("click", function () {
-          state.styles[cfg.key] = opt.key;
+          section.style = opt.key;
           saveState();
-          renderStyleSelectors();
+          renderSections();
         });
-        container.appendChild(btn);
+        styleSelector.appendChild(btn);
       });
-    });
-  }
+      card.appendChild(styleSelector);
 
-  function renderTasks() {
-    Object.keys(SECTION_CONFIG).forEach(function (sectionKey) {
-      var cfg = SECTION_CONFIG[sectionKey];
-      var container = document.getElementById(cfg.listId);
-      container.innerHTML = "";
-      var items = state[cfg.key];
-
-      items.forEach(function (item, idx) {
+      var listEl = document.createElement("div");
+      section.items.forEach(function (item, idx) {
         var row = document.createElement("div");
         row.className = "task-row";
 
-        if (cfg.important) {
-          var impBtn = document.createElement("button");
-          impBtn.className = "important-toggle" + (item.important ? " active" : "");
-          impBtn.textContent = "!";
-          impBtn.title = "Mark as VERY IMPORTANT";
-          impBtn.addEventListener("click", function () {
-            item.important = !item.important;
-            saveState();
-            renderTasks();
-          });
-          row.appendChild(impBtn);
-        }
+        var impBtn = document.createElement("button");
+        impBtn.className = "important-toggle" + (item.important ? " active" : "");
+        impBtn.textContent = "!";
+        impBtn.title = "Mark as VERY IMPORTANT";
+        impBtn.addEventListener("click", function () {
+          item.important = !item.important;
+          saveState();
+          renderSections();
+        });
+        row.appendChild(impBtn);
 
         var input = document.createElement("input");
         input.type = "text";
         input.value = item.text;
-        input.placeholder = cfg.placeholder;
+        input.placeholder = "New item...";
         input.addEventListener("input", function () {
           item.text = input.value;
           saveState();
@@ -204,17 +262,17 @@
         upBtn.textContent = "▲";
         upBtn.disabled = idx === 0;
         upBtn.addEventListener("click", function () {
-          items.splice(idx - 1, 0, items.splice(idx, 1)[0]);
+          section.items.splice(idx - 1, 0, section.items.splice(idx, 1)[0]);
           saveState();
-          renderTasks();
+          renderSections();
         });
         var downBtn = document.createElement("button");
         downBtn.textContent = "▼";
-        downBtn.disabled = idx === items.length - 1;
+        downBtn.disabled = idx === section.items.length - 1;
         downBtn.addEventListener("click", function () {
-          items.splice(idx + 1, 0, items.splice(idx, 1)[0]);
+          section.items.splice(idx + 1, 0, section.items.splice(idx, 1)[0]);
           saveState();
-          renderTasks();
+          renderSections();
         });
         orderWrap.appendChild(upBtn);
         orderWrap.appendChild(downBtn);
@@ -225,28 +283,40 @@
         delBtn.textContent = "✕";
         delBtn.title = "Delete";
         delBtn.addEventListener("click", function () {
-          items.splice(idx, 1);
+          section.items.splice(idx, 1);
           saveState();
-          renderTasks();
+          renderSections();
         });
         row.appendChild(delBtn);
 
-        container.appendChild(row);
+        listEl.appendChild(row);
       });
+      card.appendChild(listEl);
+
+      var addTaskBtn = document.createElement("button");
+      addTaskBtn.className = "add-task-btn";
+      addTaskBtn.textContent = "+ Add task";
+      addTaskBtn.addEventListener("click", function () {
+        section.items.push({ text: "", important: false });
+        saveState();
+        renderSections();
+        var inputs = listEl.parentNode.querySelectorAll("input[type=text]");
+        var last = inputs[inputs.length - 1];
+        if (last) last.focus();
+      });
+      card.appendChild(addTaskBtn);
+
+      container.appendChild(card);
     });
   }
 
-  document.querySelectorAll(".add-task-btn").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var sectionKey = btn.getAttribute("data-section");
-      var cfg = SECTION_CONFIG[sectionKey];
-      state[cfg.key].push({ text: "", important: false });
-      saveState();
-      renderTasks();
-      var inputs = document.getElementById(cfg.listId).querySelectorAll("input[type=text]");
-      var last = inputs[inputs.length - 1];
-      if (last) last.focus();
-    });
+  document.getElementById("addSectionBtn").addEventListener("click", function () {
+    state.sections.push({ id: generateId(), title: "New Section", style: "numbers", items: [] });
+    saveState();
+    renderSections();
+    var titleInputs = document.querySelectorAll(".section-title-input");
+    var last = titleInputs[titleInputs.length - 1];
+    if (last) { last.focus(); last.select(); }
   });
 
   // ---------- Message generation ----------
@@ -256,11 +326,11 @@
     return "* ";
   }
 
-  function appendSectionLines(lines, items, style, supportsImportant) {
+  function appendSectionLines(lines, items, style) {
     var i = 0;
     items.forEach(function (item) {
       if (!item.text.trim()) return;
-      var important = supportsImportant && item.important ? "*VERY IMPORTANT*: " : "";
+      var important = item.important ? "*VERY IMPORTANT*: " : "";
       lines.push(itemPrefix(style, i) + important + item.text.trim());
       if (style === "letters") lines.push("");
       i++;
@@ -271,22 +341,24 @@
     while (lines.length && lines[lines.length - 1] === "") lines.pop();
   }
 
+  var SEPARATOR = "___________________________";
+
   function generateMessage() {
     var lines = [];
-    lines.push("*To Do: " + formatDisplayDate(state.date) + ":*");
-    lines.push("");
-    appendSectionLines(lines, state.todo, state.styles.todo, true);
-    trimTrailingBlank(lines);
-    lines.push("");
-    lines.push("___________________________");
-    lines.push("*Currently Doing:*");
-    lines.push("");
-    appendSectionLines(lines, state.doing, state.styles.doing, false);
-    trimTrailingBlank(lines);
-    lines.push("___________________________");
-    lines.push("*On Hold:*");
-    lines.push("");
-    appendSectionLines(lines, state.hold, state.styles.hold, false);
+    state.sections.forEach(function (section, idx) {
+      if (idx > 0) {
+        trimTrailingBlank(lines);
+        lines.push("");
+        lines.push(SEPARATOR);
+      }
+      var titleText = (section.title || "Untitled").trim();
+      var header = idx === 0
+        ? "*" + titleText + ": " + formatDisplayDate(state.date) + ":*"
+        : "*" + titleText + ":*";
+      lines.push(header);
+      lines.push("");
+      appendSectionLines(lines, section.items, section.style);
+    });
     trimTrailingBlank(lines);
     return lines.join("\n");
   }
@@ -323,62 +395,6 @@
     return str.replace(/[⁠​‌‍﻿]/g, "");
   }
 
-  function parsePastedMessage(raw) {
-    var text = stripInvisible(raw).replace(/\r\n/g, "\n");
-
-    // Date: DD/MON/YYYY
-    var dateMatch = text.match(/(\d{1,2})\/([A-Za-z]{3})\/(\d{4})/);
-    if (dateMatch) {
-      var day = parseInt(dateMatch[1], 10);
-      var monIdx = MONTHS.indexOf(dateMatch[2].toUpperCase());
-      var year = parseInt(dateMatch[3], 10);
-      if (monIdx !== -1) {
-        state.date = isoFromParts(year, monIdx, day);
-        state.calViewYear = year;
-        state.calViewMonth = monIdx;
-      }
-    }
-
-    // Split into sections using header keywords, keep order-agnostic
-    var headerRegex = /(to do|currently doing|on hold)/gi;
-    var indices = [];
-    var m;
-    while ((m = headerRegex.exec(text)) !== null) {
-      indices.push({ key: normalizeHeader(m[1]), start: m.index });
-    }
-    indices.push({ key: null, start: text.length });
-
-    var blocks = { todo: "", doing: "", hold: "" };
-    for (var i = 0; i < indices.length - 1; i++) {
-      var cur = indices[i];
-      if (!cur.key) continue;
-      var chunk = text.slice(cur.start, indices[i + 1].start);
-      blocks[cur.key] = (blocks[cur.key] || "") + "\n" + chunk;
-    }
-
-    var todoFound = extractItems(blocks.todo);
-    if (todoFound && todoFound.items.length) {
-      state.todo = todoFound.items.map(function (line) {
-        var important = /\*?VERY IMPORTANT\*?:?\s*/i.test(line);
-        var text = line.replace(/\*?VERY IMPORTANT\*?:?\s*/i, "").trim();
-        return { text: text, important: important };
-      });
-      state.styles.todo = todoFound.style;
-    }
-
-    var doingFound = extractItems(blocks.doing);
-    if (doingFound && doingFound.items.length) {
-      state.doing = doingFound.items.map(function (line) { return { text: line, important: false }; });
-      state.styles.doing = doingFound.style;
-    }
-
-    var holdFound = extractItems(blocks.hold);
-    if (holdFound && holdFound.items.length) {
-      state.hold = holdFound.items.map(function (line) { return { text: line, important: false }; });
-      state.styles.hold = holdFound.style;
-    }
-  }
-
   var LINE_PATTERNS = [
     { style: "numbers", source: "^\\s*\\d+[.)]\\s*(.+)$" },
     { style: "letters", source: "^\\s*[A-Za-z]\\)\\s*(.+)$" },
@@ -402,22 +418,73 @@
     return best;
   }
 
-  function normalizeHeader(h) {
-    h = h.toLowerCase();
-    if (h === "to do") return "todo";
-    if (h === "currently doing") return "doing";
-    if (h === "on hold") return "hold";
-    return null;
+  function parsePastedMessage(raw) {
+    var text = stripInvisible(raw).replace(/\r\n/g, "\n");
+
+    var dateMatch = text.match(/(\d{1,2})\/([A-Za-z]{3})\/(\d{4})/);
+    if (dateMatch) {
+      var day = parseInt(dateMatch[1], 10);
+      var monIdx = MONTHS.indexOf(dateMatch[2].toUpperCase());
+      var year = parseInt(dateMatch[3], 10);
+      if (monIdx !== -1) {
+        state.date = isoFromParts(year, monIdx, day);
+        state.calViewYear = year;
+        state.calViewMonth = monIdx;
+      }
+    }
+
+    // Any line fully wrapped in a single pair of asterisks is treated as a section header.
+    var lines = text.split("\n");
+    var blocks = [];
+    var current = null;
+    lines.forEach(function (line) {
+      var trimmed = line.trim();
+      var headerMatch = trimmed.match(/^\*(.+)\*$/);
+      if (headerMatch) {
+        var title = headerMatch[1]
+          .replace(/(\d{1,2})\/([A-Za-z]{3})\/(\d{4})/, "")
+          .replace(/[:\s]+$/, "")
+          .trim();
+        current = { title: title, contentLines: [] };
+        blocks.push(current);
+        return;
+      }
+      if (/^_{3,}$/.test(trimmed)) return;
+      if (current) current.contentLines.push(line);
+    });
+
+    if (!blocks.length) return false;
+
+    state.sections = blocks.map(function (b) {
+      var found = extractItems(b.contentLines.join("\n"));
+      var items = found
+        ? found.items.map(function (line) {
+            var important = /\*?VERY IMPORTANT\*?:?\s*/i.test(line);
+            var text = line.replace(/\*?VERY IMPORTANT\*?:?\s*/i, "").trim();
+            return { text: text, important: important };
+          })
+        : [];
+      return {
+        id: generateId(),
+        title: b.title || "Untitled",
+        style: found ? found.style : "numbers",
+        items: items
+      };
+    });
+    return true;
   }
 
   document.getElementById("loadBtn").addEventListener("click", function () {
     var raw = document.getElementById("pasteBox").value;
     if (!raw.trim()) return;
-    parsePastedMessage(raw);
+    var ok = parsePastedMessage(raw);
+    if (!ok) {
+      alert("Couldn't find any *Section Title* headers in that text.");
+      return;
+    }
     saveState();
     renderCalendar();
-    renderStyleSelectors();
-    renderTasks();
+    renderSections();
     document.getElementById("output").value = "";
   });
 
@@ -426,20 +493,15 @@
   });
 
   document.getElementById("clearAllBtn").addEventListener("click", function () {
-    if (!confirm("Clear the date and all tasks in every section?")) return;
-    state = clone(defaultState);
-    var p = parseISO(state.date);
-    state.calViewYear = p.y;
-    state.calViewMonth = p.m;
+    if (!confirm("Clear the date and all sections?")) return;
+    state = defaultState();
     saveState();
     renderCalendar();
-    renderStyleSelectors();
-    renderTasks();
+    renderSections();
     document.getElementById("output").value = "";
   });
 
   // ---------- Init ----------
   renderCalendar();
-  renderStyleSelectors();
-  renderTasks();
+  renderSections();
 })();
