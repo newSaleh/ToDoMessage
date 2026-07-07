@@ -2,9 +2,35 @@
   "use strict";
 
   var STORAGE_KEY = "taskUpdateBuilder.v1";
+  var THEME_KEY = "taskUpdateBuilder.theme";
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   var DOW = ["S","M","T","W","T","F","S"];
   var DOT_COLORS = ["#4f9dff", "#f5a623", "#8b93a3", "#3ecf6f", "#e5534b", "#b57bee"];
+
+  // ---------- Theme toggle ----------
+  function systemTheme() {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  function applyTheme(theme) {
+    var root = document.documentElement;
+    if (theme === "light" || theme === "dark") {
+      root.setAttribute("data-theme", theme);
+    } else {
+      root.removeAttribute("data-theme");
+    }
+    var effective = theme === "system" ? systemTheme() : theme;
+    var btn = document.getElementById("themeToggleBtn");
+    btn.textContent = effective === "dark" ? "☀️ Light mode" : "🌙 Dark mode";
+  }
+  var savedTheme = localStorage.getItem(THEME_KEY) || "system";
+  applyTheme(savedTheme);
+  document.getElementById("themeToggleBtn").addEventListener("click", function () {
+    var current = localStorage.getItem(THEME_KEY) || "system";
+    var effective = current === "system" ? systemTheme() : current;
+    var next = effective === "dark" ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
 
   function todayISO() {
     var d = new Date();
@@ -169,6 +195,11 @@
   });
 
   // ---------- Sections rendering ----------
+  function autoGrowTextarea(el) {
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+
   function renderSections() {
     var container = document.getElementById("sectionsContainer");
     container.innerHTML = "";
@@ -176,6 +207,7 @@
     state.sections.forEach(function (section, sectionIdx) {
       var card = document.createElement("div");
       card.className = "card";
+      card.setAttribute("data-section-id", section.id);
 
       var header = document.createElement("div");
       header.className = "section-header";
@@ -246,13 +278,15 @@
         });
         row.appendChild(impBtn);
 
-        var input = document.createElement("input");
-        input.type = "text";
+        var input = document.createElement("textarea");
+        input.className = "task-textarea";
+        input.rows = 1;
         input.value = item.text;
         input.placeholder = "New item...";
         input.addEventListener("input", function () {
           item.text = input.value;
           saveState();
+          autoGrowTextarea(input);
         });
         row.appendChild(input);
 
@@ -300,14 +334,17 @@
         section.items.push({ text: "", important: false });
         saveState();
         renderSections();
-        var inputs = listEl.parentNode.querySelectorAll("input[type=text]");
-        var last = inputs[inputs.length - 1];
-        if (last) last.focus();
+        var freshCard = container.querySelector('[data-section-id="' + section.id + '"]');
+        var textareas = freshCard ? freshCard.querySelectorAll(".task-textarea") : [];
+        var last = textareas[textareas.length - 1];
+        if (last) { last.focus(); autoGrowTextarea(last); }
       });
       card.appendChild(addTaskBtn);
 
       container.appendChild(card);
     });
+
+    container.querySelectorAll(".task-textarea").forEach(autoGrowTextarea);
   }
 
   document.getElementById("addSectionBtn").addEventListener("click", function () {
